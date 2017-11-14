@@ -160,7 +160,7 @@ function ramdaPartial(arity) {
 #+END_SRC
 
 Now we can put it all together. For now let's support up to 10 arg functions.
-#+BEGIN_SRC js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
+#+BEGIN_SRC js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim :tangle index.js
 <<ramdaPartial>>
 
 console.log(ramdaPartial(10))

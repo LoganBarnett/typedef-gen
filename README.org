@@ -1,0 +1,15 @@
+This is a place where I've put utilities for generating code for [[https://flow.org][Flow]] library
+definitions when the definitions are quite large and error prone for a human to
+do, but are simple enough to generate programmatically. This includes functions
+such as [[http://ramdajs.com][Ramda's]] [[http://ramdajs.com/docs/#partial][partial]].
+
+This is all written up in [[index.org]], and the results of that file can be tangled
+using [[http://www.literateprogramming.com][literate programming]] to produce utilities for others to use who can't take
+advantage of [[http://orgmode.org][org-mode]].
+
+To generate Ramda's partial type defintion, simply invoke the following from
+your shell:
+
+#+BEGIN_SRC sh
+node ramda-partial.js
+#+END_SRC

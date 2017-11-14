@@ -1,4 +1,5 @@
-const R = require('ramda')
+var dir="/Users/logan/dev/typedef-gen/";
+const R = require(dir + 'node_modules/ramda')
 // n is zero based, with 0 being "A".
 function argName(n) {
   return String.fromCodePoint(65 + n)

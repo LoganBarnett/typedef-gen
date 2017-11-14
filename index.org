@@ -119,7 +119,7 @@ This kind of skip/take work is tricky. Here's what our 4 arity example looks
 like for =permutationsForArity=. It should conceptually look like our example
 above.
 
-#+BEGIN_SRC js exports: both :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
+#+BEGIN_SRC js :exports both :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
 <<permutationsForArity>>
 
 const permutations = permutationsForArity(4)

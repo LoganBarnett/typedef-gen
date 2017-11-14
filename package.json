@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "ramda": "0.25.0"
+  },
+  "name": "typedef-gen",
+  "version": "1.0.0",
+  "description": "A generator for typedefs for functions such as Ramda's partial.",
+  "main": "index.js",
+  "repository": "git@github.com:LoganBarnett/typedef-gen.git",
+  "author": "Logan Barnett <logustus@gmail.com>",
+  "license": "MIT"
+}

@@ -1,0 +1,351 @@
+#+TITLE: Flow Libdef Generation
+#+AUTHOR: Logan Barnett
+#+EMAIL: logustus@gmail.com
+#+TAGS: javascript flow code-gen
+
+* introduction
+Declaring types statically can be a lot of error prone work that is painfully
+repetitive. Having a code generator to build some of the many permutations can
+remove the error prone-ness. It also means if additional permutations are
+needed, the generator can simply be re-run with a higher setting.
+
+Most of these odd permutations exist for libraries that provide basic utility.
+Immutable, Lodash, Underscore, and Ramda are a few of these. Initially this
+document will focus on Ramda, since that scratches my itch.
+
+* ramda
+
+The problem libdefs for Ramda are mostly =curry= and =partial=. Partial needs a
+fix right now (link to bug) because the typedef says it yields a curried result,
+but neither the documentation nor examples (links) support this claim.
+
+** partial
+A simple function for partial might look like this:
+
+#+BEGIN_EXAMPLE javascript
+(<A, B, C, R>(...r: [A]) => ((...r: [B, C]) => R)) &
+(<A, B, C, R>(...r: [A, B]) => ((...r: [C]) => R)) &
+(<A, B, C, R>(...r: [A, B, C]) => (() => R))
+#+END_EXAMPLE
+
+The trouble here is there are 3 arguments and a return type, and they can be
+partially applied in any combination so long as left-to-right is preserved.
+There is the potential problem with the placeholder =R.__=. This placeholder
+allows a consumer to "skip" partially applying a particular argument. This has
+the effect of somewhat rearranging the arguments. The placeholder won't be
+covered on this pass.
+
+One thing to note about =partial= is that it can fully saturate a function and
+still not apply (call) that function. That's because it's allow in Javascript
+for a function to take no arguments.
+
+Each arity of a function requires N permutations, where N is the number of
+parameters of the function. 0 arg functions can be skipped.
+
+First off, let's use Ramda to fix Ramda. This is how you know this is a proper
+programming article.
+
+#+NAME: ramda
+#+BEGIN_SRC js :noweb yes :var dir=(file-name-directory buffer-file-name)
+const R = require(dir + 'node_modules/ramda')
+#+END_SRC
+
+#+RESULTS: ramda
+: undefined
+
+We need to use letters to express type names. Generally it's just a single
+capital letter, using =A= as the starting letter. =R= is reserved as a return
+type, so we should skip that. That can be a version 2 feature.
+
+#+NAME: argName
+#+BEGIN_SRC javascript :noweb yes
+<<ramda>>
+// n is zero based, with 0 being "A".
+function argName(n) {
+  return String.fromCodePoint(65 + n)
+}
+#+END_SRC
+
+Having a single argument from a number is useful, but we also need to string
+together a series of them. This function produces an incrementing list of
+arguments based on the number we give it. Sometimes we also need things in the
+form =B, C, D= so the skip arg provides that.
+#+NAME: argList
+#+BEGIN_SRC js :noweb yes
+<<argName>>
+
+function argList(skip, n) {
+  return R.range(skip, n).map(argName)
+}
+
+function argListString(skip, n) {
+  return argList(skip, n).join(', ')
+}
+#+END_SRC
+
+For a given arity we have to walk through the possible permutations. Generally
+this means if we have =A, B, C, D= then we need to produce a shifted list like
+this:
+#+BEGIN_EXAMPLE
+A => B, C, D
+A, B => C, D
+A, B, C => D
+A, B, C D => ()
+#+END_EXAMPLE
+
+Here the results are reversed because Flow tends to work better if matching
+arities are listed from smallest to largest. I don't know that this is
+documented anywhere.
+
+#+NAME: permutationsForArity
+#+BEGIN_SRC js :noweb yes
+<<argList>>
+
+function permutationsForArity(arity) {
+  return R.range(0, arity).map((perm) => {
+    const n = arity - perm
+    return `\
+(<${argListString(0, arity)}, R>(
+  (...r: [${argListString(0, arity)}]) => R,
+  args: [${argListString(0, n)}],
+) => ((${argListString(n, arity)}) => R))`
+  }).reverse()
+}
+#+END_SRC
+
+#+RESULTS: permutationsForArity
+
+This kind of skip/take work is tricky. Here's what our 4 arity example looks
+like for =permutationsForArity=. It should conceptually look like our example
+above.
+
+#+BEGIN_SRC js exports: noexport :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
+<<permutationsForArity>>
+
+const permutations = permutationsForArity(4)
+console.log(permutations.join(' &\n'))
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+(<A, B, C, D, R>(
+  (...r: [A, B, C, D]) => R,
+  args: [A],
+) => ((B, C, D) => R)) &
+(<A, B, C, D, R>(
+  (...r: [A, B, C, D]) => R,
+  args: [A, B],
+) => ((C, D) => R)) &
+(<A, B, C, D, R>(
+  (...r: [A, B, C, D]) => R,
+  args: [A, B, C],
+) => ((D) => R)) &
+(<A, B, C, D, R>(
+  (...r: [A, B, C, D]) => R,
+  args: [A, B, C, D],
+) => (() => R))
+#+end_example
+
+We can produce a range of numbers using Ramda, and use that range to iterate
+through the permutations of arities.
+#+NAME: ramdaPartial
+#+BEGIN_SRC js :noweb yes
+<<permutationsForArity>>
+
+function ramdaPartial(arity) {
+  return R.flatten(
+    R.range(0, arity).map(n => permutationsForArity(n)),
+  ).join(' &\n')
+}
+#+END_SRC
+
+Now we can put it all together. For now let's support up to 10 arg functions.
+#+BEGIN_SRC js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
+<<ramdaPartial>>
+
+console.log(ramdaPartial(10))
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+(<A, R>(
+  (...r: [A]) => R,
+  args: [A],
+) => (() => R)) &
+(<A, B, R>(
+  (...r: [A, B]) => R,
+  args: [A],
+) => ((B) => R)) &
+(<A, B, R>(
+  (...r: [A, B]) => R,
+  args: [A, B],
+) => (() => R)) &
+(<A, B, C, R>(
+  (...r: [A, B, C]) => R,
+  args: [A],
+) => ((B, C) => R)) &
+(<A, B, C, R>(
+  (...r: [A, B, C]) => R,
+  args: [A, B],
+) => ((C) => R)) &
+(<A, B, C, R>(
+  (...r: [A, B, C]) => R,
+  args: [A, B, C],
+) => (() => R)) &
+(<A, B, C, D, R>(
+  (...r: [A, B, C, D]) => R,
+  args: [A],
+) => ((B, C, D) => R)) &
+(<A, B, C, D, R>(
+  (...r: [A, B, C, D]) => R,
+  args: [A, B],
+) => ((C, D) => R)) &
+(<A, B, C, D, R>(
+  (...r: [A, B, C, D]) => R,
+  args: [A, B, C],
+) => ((D) => R)) &
+(<A, B, C, D, R>(
+  (...r: [A, B, C, D]) => R,
+  args: [A, B, C, D],
+) => (() => R)) &
+(<A, B, C, D, E, R>(
+  (...r: [A, B, C, D, E]) => R,
+  args: [A],
+) => ((B, C, D, E) => R)) &
+(<A, B, C, D, E, R>(
+  (...r: [A, B, C, D, E]) => R,
+  args: [A, B],
+) => ((C, D, E) => R)) &
+(<A, B, C, D, E, R>(
+  (...r: [A, B, C, D, E]) => R,
+  args: [A, B, C],
+) => ((D, E) => R)) &
+(<A, B, C, D, E, R>(
+  (...r: [A, B, C, D, E]) => R,
+  args: [A, B, C, D],
+) => ((E) => R)) &
+(<A, B, C, D, E, R>(
+  (...r: [A, B, C, D, E]) => R,
+  args: [A, B, C, D, E],
+) => (() => R)) &
+(<A, B, C, D, E, F, R>(
+  (...r: [A, B, C, D, E, F]) => R,
+  args: [A],
+) => ((B, C, D, E, F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (...r: [A, B, C, D, E, F]) => R,
+  args: [A, B],
+) => ((C, D, E, F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (...r: [A, B, C, D, E, F]) => R,
+  args: [A, B, C],
+) => ((D, E, F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (...r: [A, B, C, D, E, F]) => R,
+  args: [A, B, C, D],
+) => ((E, F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (...r: [A, B, C, D, E, F]) => R,
+  args: [A, B, C, D, E],
+) => ((F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (...r: [A, B, C, D, E, F]) => R,
+  args: [A, B, C, D, E, F],
+) => (() => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (...r: [A, B, C, D, E, F, G]) => R,
+  args: [A],
+) => ((B, C, D, E, F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (...r: [A, B, C, D, E, F, G]) => R,
+  args: [A, B],
+) => ((C, D, E, F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (...r: [A, B, C, D, E, F, G]) => R,
+  args: [A, B, C],
+) => ((D, E, F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (...r: [A, B, C, D, E, F, G]) => R,
+  args: [A, B, C, D],
+) => ((E, F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (...r: [A, B, C, D, E, F, G]) => R,
+  args: [A, B, C, D, E],
+) => ((F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (...r: [A, B, C, D, E, F, G]) => R,
+  args: [A, B, C, D, E, F],
+) => ((G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (...r: [A, B, C, D, E, F, G]) => R,
+  args: [A, B, C, D, E, F, G],
+) => (() => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (...r: [A, B, C, D, E, F, G, H]) => R,
+  args: [A],
+) => ((B, C, D, E, F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (...r: [A, B, C, D, E, F, G, H]) => R,
+  args: [A, B],
+) => ((C, D, E, F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (...r: [A, B, C, D, E, F, G, H]) => R,
+  args: [A, B, C],
+) => ((D, E, F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (...r: [A, B, C, D, E, F, G, H]) => R,
+  args: [A, B, C, D],
+) => ((E, F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (...r: [A, B, C, D, E, F, G, H]) => R,
+  args: [A, B, C, D, E],
+) => ((F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (...r: [A, B, C, D, E, F, G, H]) => R,
+  args: [A, B, C, D, E, F],
+) => ((G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (...r: [A, B, C, D, E, F, G, H]) => R,
+  args: [A, B, C, D, E, F, G],
+) => ((H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (...r: [A, B, C, D, E, F, G, H]) => R,
+  args: [A, B, C, D, E, F, G, H],
+) => (() => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A],
+) => ((B, C, D, E, F, G, H, I) => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A, B],
+) => ((C, D, E, F, G, H, I) => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A, B, C],
+) => ((D, E, F, G, H, I) => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A, B, C, D],
+) => ((E, F, G, H, I) => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A, B, C, D, E],
+) => ((F, G, H, I) => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A, B, C, D, E, F],
+) => ((G, H, I) => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A, B, C, D, E, F, G],
+) => ((H, I) => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A, B, C, D, E, F, G, H],
+) => ((I) => R)) &
+(<A, B, C, D, E, F, G, H, I, R>(
+  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  args: [A, B, C, D, E, F, G, H, I],
+) => (() => R))
+#+end_example

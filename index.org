@@ -85,12 +85,14 @@ function argListString(skip, n) {
 
 For a given arity we have to walk through the possible permutations. Generally
 this means if we have =A, B, C, D= then we need to produce a shifted list like
-this:
+this. The list should go from largest arity to smallest, because Flow matches on
+this more favorably. Otherwise it can match too aggressively against the wrong
+signatures.
 #+BEGIN_EXAMPLE
-A => B, C, D
-A, B => C, D
+A, B, C, D => ()
 A, B, C => D
-A, B, C D => ()
+A, B => C, D
+A => B, C, D
 #+END_EXAMPLE
 
 Here the results are reversed because Flow tends to work better if matching
@@ -106,7 +108,7 @@ function permutationsForArity(arity) {
     const n = arity - perm
     return `\
 (<${argListString(0, arity)}, R>(
-  (...r: [${argListString(0, arity)}]) => R,
+  (${argListString(0, arity)}) => R,
   args: [${argListString(0, n)}],
 ) => ((${argListString(n, arity)}) => R))`
   }).reverse()
@@ -129,32 +131,33 @@ console.log(permutations.join(' &\n'))
 #+RESULTS:
 #+begin_example
 (<A, B, C, D, R>(
-  (...r: [A, B, C, D]) => R,
+  (A, B, C, D) => R,
   args: [A],
 ) => ((B, C, D) => R)) &
 (<A, B, C, D, R>(
-  (...r: [A, B, C, D]) => R,
+  (A, B, C, D) => R,
   args: [A, B],
 ) => ((C, D) => R)) &
 (<A, B, C, D, R>(
-  (...r: [A, B, C, D]) => R,
+  (A, B, C, D) => R,
   args: [A, B, C],
 ) => ((D) => R)) &
 (<A, B, C, D, R>(
-  (...r: [A, B, C, D]) => R,
+  (A, B, C, D) => R,
   args: [A, B, C, D],
 ) => (() => R))
 #+end_example
 
 We can produce a range of numbers using Ramda, and use that range to iterate
-through the permutations of arities.
+through the permutations of arities. We move downwards instead of upwards
+through the arity count because we want to match the largest function first.
 #+NAME: ramdaPartial
 #+BEGIN_SRC js :noweb yes
 <<permutationsForArity>>
 
 function ramdaPartial(arity) {
   return R.flatten(
-    R.range(0, arity).map(n => permutationsForArity(n)),
+    R.range(0, arity).reverse().map(n => permutationsForArity(n)),
   ).join(' &\n')
 }
 #+END_SRC
@@ -168,184 +171,184 @@ console.log(ramdaPartial(10))
 
 #+RESULTS:
 #+begin_example
-(<A, R>(
-  (...r: [A]) => R,
-  args: [A],
-) => (() => R)) &
-(<A, B, R>(
-  (...r: [A, B]) => R,
-  args: [A],
-) => ((B) => R)) &
-(<A, B, R>(
-  (...r: [A, B]) => R,
-  args: [A, B],
-) => (() => R)) &
-(<A, B, C, R>(
-  (...r: [A, B, C]) => R,
-  args: [A],
-) => ((B, C) => R)) &
-(<A, B, C, R>(
-  (...r: [A, B, C]) => R,
-  args: [A, B],
-) => ((C) => R)) &
-(<A, B, C, R>(
-  (...r: [A, B, C]) => R,
-  args: [A, B, C],
-) => (() => R)) &
-(<A, B, C, D, R>(
-  (...r: [A, B, C, D]) => R,
-  args: [A],
-) => ((B, C, D) => R)) &
-(<A, B, C, D, R>(
-  (...r: [A, B, C, D]) => R,
-  args: [A, B],
-) => ((C, D) => R)) &
-(<A, B, C, D, R>(
-  (...r: [A, B, C, D]) => R,
-  args: [A, B, C],
-) => ((D) => R)) &
-(<A, B, C, D, R>(
-  (...r: [A, B, C, D]) => R,
-  args: [A, B, C, D],
-) => (() => R)) &
-(<A, B, C, D, E, R>(
-  (...r: [A, B, C, D, E]) => R,
-  args: [A],
-) => ((B, C, D, E) => R)) &
-(<A, B, C, D, E, R>(
-  (...r: [A, B, C, D, E]) => R,
-  args: [A, B],
-) => ((C, D, E) => R)) &
-(<A, B, C, D, E, R>(
-  (...r: [A, B, C, D, E]) => R,
-  args: [A, B, C],
-) => ((D, E) => R)) &
-(<A, B, C, D, E, R>(
-  (...r: [A, B, C, D, E]) => R,
-  args: [A, B, C, D],
-) => ((E) => R)) &
-(<A, B, C, D, E, R>(
-  (...r: [A, B, C, D, E]) => R,
-  args: [A, B, C, D, E],
-) => (() => R)) &
-(<A, B, C, D, E, F, R>(
-  (...r: [A, B, C, D, E, F]) => R,
-  args: [A],
-) => ((B, C, D, E, F) => R)) &
-(<A, B, C, D, E, F, R>(
-  (...r: [A, B, C, D, E, F]) => R,
-  args: [A, B],
-) => ((C, D, E, F) => R)) &
-(<A, B, C, D, E, F, R>(
-  (...r: [A, B, C, D, E, F]) => R,
-  args: [A, B, C],
-) => ((D, E, F) => R)) &
-(<A, B, C, D, E, F, R>(
-  (...r: [A, B, C, D, E, F]) => R,
-  args: [A, B, C, D],
-) => ((E, F) => R)) &
-(<A, B, C, D, E, F, R>(
-  (...r: [A, B, C, D, E, F]) => R,
-  args: [A, B, C, D, E],
-) => ((F) => R)) &
-(<A, B, C, D, E, F, R>(
-  (...r: [A, B, C, D, E, F]) => R,
-  args: [A, B, C, D, E, F],
-) => (() => R)) &
-(<A, B, C, D, E, F, G, R>(
-  (...r: [A, B, C, D, E, F, G]) => R,
-  args: [A],
-) => ((B, C, D, E, F, G) => R)) &
-(<A, B, C, D, E, F, G, R>(
-  (...r: [A, B, C, D, E, F, G]) => R,
-  args: [A, B],
-) => ((C, D, E, F, G) => R)) &
-(<A, B, C, D, E, F, G, R>(
-  (...r: [A, B, C, D, E, F, G]) => R,
-  args: [A, B, C],
-) => ((D, E, F, G) => R)) &
-(<A, B, C, D, E, F, G, R>(
-  (...r: [A, B, C, D, E, F, G]) => R,
-  args: [A, B, C, D],
-) => ((E, F, G) => R)) &
-(<A, B, C, D, E, F, G, R>(
-  (...r: [A, B, C, D, E, F, G]) => R,
-  args: [A, B, C, D, E],
-) => ((F, G) => R)) &
-(<A, B, C, D, E, F, G, R>(
-  (...r: [A, B, C, D, E, F, G]) => R,
-  args: [A, B, C, D, E, F],
-) => ((G) => R)) &
-(<A, B, C, D, E, F, G, R>(
-  (...r: [A, B, C, D, E, F, G]) => R,
-  args: [A, B, C, D, E, F, G],
-) => (() => R)) &
-(<A, B, C, D, E, F, G, H, R>(
-  (...r: [A, B, C, D, E, F, G, H]) => R,
-  args: [A],
-) => ((B, C, D, E, F, G, H) => R)) &
-(<A, B, C, D, E, F, G, H, R>(
-  (...r: [A, B, C, D, E, F, G, H]) => R,
-  args: [A, B],
-) => ((C, D, E, F, G, H) => R)) &
-(<A, B, C, D, E, F, G, H, R>(
-  (...r: [A, B, C, D, E, F, G, H]) => R,
-  args: [A, B, C],
-) => ((D, E, F, G, H) => R)) &
-(<A, B, C, D, E, F, G, H, R>(
-  (...r: [A, B, C, D, E, F, G, H]) => R,
-  args: [A, B, C, D],
-) => ((E, F, G, H) => R)) &
-(<A, B, C, D, E, F, G, H, R>(
-  (...r: [A, B, C, D, E, F, G, H]) => R,
-  args: [A, B, C, D, E],
-) => ((F, G, H) => R)) &
-(<A, B, C, D, E, F, G, H, R>(
-  (...r: [A, B, C, D, E, F, G, H]) => R,
-  args: [A, B, C, D, E, F],
-) => ((G, H) => R)) &
-(<A, B, C, D, E, F, G, H, R>(
-  (...r: [A, B, C, D, E, F, G, H]) => R,
-  args: [A, B, C, D, E, F, G],
-) => ((H) => R)) &
-(<A, B, C, D, E, F, G, H, R>(
-  (...r: [A, B, C, D, E, F, G, H]) => R,
-  args: [A, B, C, D, E, F, G, H],
-) => (() => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A],
 ) => ((B, C, D, E, F, G, H, I) => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A, B],
 ) => ((C, D, E, F, G, H, I) => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A, B, C],
 ) => ((D, E, F, G, H, I) => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A, B, C, D],
 ) => ((E, F, G, H, I) => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A, B, C, D, E],
 ) => ((F, G, H, I) => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A, B, C, D, E, F],
 ) => ((G, H, I) => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A, B, C, D, E, F, G],
 ) => ((H, I) => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A, B, C, D, E, F, G, H],
 ) => ((I) => R)) &
 (<A, B, C, D, E, F, G, H, I, R>(
-  (...r: [A, B, C, D, E, F, G, H, I]) => R,
+  (A, B, C, D, E, F, G, H, I) => R,
   args: [A, B, C, D, E, F, G, H, I],
+) => (() => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (A, B, C, D, E, F, G, H) => R,
+  args: [A],
+) => ((B, C, D, E, F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (A, B, C, D, E, F, G, H) => R,
+  args: [A, B],
+) => ((C, D, E, F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (A, B, C, D, E, F, G, H) => R,
+  args: [A, B, C],
+) => ((D, E, F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (A, B, C, D, E, F, G, H) => R,
+  args: [A, B, C, D],
+) => ((E, F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (A, B, C, D, E, F, G, H) => R,
+  args: [A, B, C, D, E],
+) => ((F, G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (A, B, C, D, E, F, G, H) => R,
+  args: [A, B, C, D, E, F],
+) => ((G, H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (A, B, C, D, E, F, G, H) => R,
+  args: [A, B, C, D, E, F, G],
+) => ((H) => R)) &
+(<A, B, C, D, E, F, G, H, R>(
+  (A, B, C, D, E, F, G, H) => R,
+  args: [A, B, C, D, E, F, G, H],
+) => (() => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (A, B, C, D, E, F, G) => R,
+  args: [A],
+) => ((B, C, D, E, F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (A, B, C, D, E, F, G) => R,
+  args: [A, B],
+) => ((C, D, E, F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (A, B, C, D, E, F, G) => R,
+  args: [A, B, C],
+) => ((D, E, F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (A, B, C, D, E, F, G) => R,
+  args: [A, B, C, D],
+) => ((E, F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (A, B, C, D, E, F, G) => R,
+  args: [A, B, C, D, E],
+) => ((F, G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (A, B, C, D, E, F, G) => R,
+  args: [A, B, C, D, E, F],
+) => ((G) => R)) &
+(<A, B, C, D, E, F, G, R>(
+  (A, B, C, D, E, F, G) => R,
+  args: [A, B, C, D, E, F, G],
+) => (() => R)) &
+(<A, B, C, D, E, F, R>(
+  (A, B, C, D, E, F) => R,
+  args: [A],
+) => ((B, C, D, E, F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (A, B, C, D, E, F) => R,
+  args: [A, B],
+) => ((C, D, E, F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (A, B, C, D, E, F) => R,
+  args: [A, B, C],
+) => ((D, E, F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (A, B, C, D, E, F) => R,
+  args: [A, B, C, D],
+) => ((E, F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (A, B, C, D, E, F) => R,
+  args: [A, B, C, D, E],
+) => ((F) => R)) &
+(<A, B, C, D, E, F, R>(
+  (A, B, C, D, E, F) => R,
+  args: [A, B, C, D, E, F],
+) => (() => R)) &
+(<A, B, C, D, E, R>(
+  (A, B, C, D, E) => R,
+  args: [A],
+) => ((B, C, D, E) => R)) &
+(<A, B, C, D, E, R>(
+  (A, B, C, D, E) => R,
+  args: [A, B],
+) => ((C, D, E) => R)) &
+(<A, B, C, D, E, R>(
+  (A, B, C, D, E) => R,
+  args: [A, B, C],
+) => ((D, E) => R)) &
+(<A, B, C, D, E, R>(
+  (A, B, C, D, E) => R,
+  args: [A, B, C, D],
+) => ((E) => R)) &
+(<A, B, C, D, E, R>(
+  (A, B, C, D, E) => R,
+  args: [A, B, C, D, E],
+) => (() => R)) &
+(<A, B, C, D, R>(
+  (A, B, C, D) => R,
+  args: [A],
+) => ((B, C, D) => R)) &
+(<A, B, C, D, R>(
+  (A, B, C, D) => R,
+  args: [A, B],
+) => ((C, D) => R)) &
+(<A, B, C, D, R>(
+  (A, B, C, D) => R,
+  args: [A, B, C],
+) => ((D) => R)) &
+(<A, B, C, D, R>(
+  (A, B, C, D) => R,
+  args: [A, B, C, D],
+) => (() => R)) &
+(<A, B, C, R>(
+  (A, B, C) => R,
+  args: [A],
+) => ((B, C) => R)) &
+(<A, B, C, R>(
+  (A, B, C) => R,
+  args: [A, B],
+) => ((C) => R)) &
+(<A, B, C, R>(
+  (A, B, C) => R,
+  args: [A, B, C],
+) => (() => R)) &
+(<A, B, R>(
+  (A, B) => R,
+  args: [A],
+) => ((B) => R)) &
+(<A, B, R>(
+  (A, B) => R,
+  args: [A, B],
+) => (() => R)) &
+(<A, R>(
+  (A) => R,
+  args: [A],
 ) => (() => R))
 #+end_example

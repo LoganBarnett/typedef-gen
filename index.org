@@ -18,9 +18,473 @@ document will focus on Ramda, since that scratches my itch.
 The problem libdefs for Ramda are mostly =curry= and =partial=. Partial needs a
 fix right now (link to bug) because the typedef says it yields a curried result,
 but neither the documentation nor examples (links) support this claim.
+** enlist ramda
 
-** partial
-A simple function for partial might look like this:
+   First off, let's use Ramda to fix Ramda. This is how you know this is a
+   proper programming article.
+
+   #+NAME: ramda
+   #+BEGIN_SRC js :noweb yes :var dir=(file-name-directory buffer-file-name) :results none
+     const R = require(dir + 'node_modules/ramda')
+   #+END_SRC
+
+** complement
+*** implementation
+**** example
+
+     A simple function for =complement= might look like this:
+
+     #+BEGIN_EXAMPLE javascript
+     declare function complement<Fn: () => boolean>(f: Fn) => Fn;
+     declare function complement<A, Fn: (A) => boolean>(f: Fn) => Fn;
+     declare function complement<A, B, Fn: (A, B) => boolean>(f: Fn) => Fn;
+     declare function complement<A, B, C, Fn: (A, B, C) => boolean>(f: Fn) => Fn;
+     // etc...
+     #+END_EXAMPLE
+
+     Each arity of a function requires only one permutation. We must include zero
+     argument functions.
+
+**** argument lettering
+
+     We need to use letters to express type names. Generally it's just a single
+     capital letter, using =A= as the starting letter. =Fn= is reserved as the
+     function type. If we auto increment the letters we shouldn't have to worry
+     about collisions.
+    
+     #+NAME: complement-arg-name
+     #+BEGIN_SRC javascript :noweb yes :results none
+       // n is zero based, with 0 being "A".
+       function argName(n) {
+         return String.fromCodePoint(65 + n)
+       }
+     #+END_SRC
+
+**** argument sequences
+
+     Having a single argument from a number is useful, but we also need to string
+     together a series of them. This function produces an incrementing list of
+     arguments based on the number we give it.
+
+     #+NAME: complement-arg-list
+     #+BEGIN_SRC js :noweb yes :results none
+       <<complement-arg-name>>
+
+       function argList(n) {
+         return R.range(0, n).map(argName)
+       }
+
+       function argListString(n) {
+         return argList(n).join(', ')
+       }
+     #+END_SRC
+
+**** generating overrides
+***** generator
+      If we wish to support up to =A, B, C, D= then we need to 5 produce overrides
+      (zero arguments is included). Which arity matches better in Flow seems to
+      matter, and I don't quite have a system down yet, so this list might be
+      reversed based on (likely nonsensical) rules.
+
+      #+BEGIN_EXAMPLE
+      declare function complement<Fn: () => boolean>(f: Fn) => Fn;
+      declare function complement<A, Fn: (A) => boolean>(f: Fn) => Fn;
+      declare function complement<A, B, Fn: (A, B) => boolean>(f: Fn) => Fn;
+      declare function complement<A, B, C, Fn: (A, B, C) => boolean>(f: Fn) => Fn;
+      // etc...
+      #+END_EXAMPLE
+
+      #+NAME: complement-generator
+      #+BEGIN_SRC js :noweb yes :results none
+          <<complement-arg-list>>
+
+        function complementGenerator(arity) {
+          return R.range(0, arity).map((a) => {
+            const args = argListString(a)
+            // Zero args means no comma to separate from Fn.
+            const argSeparator = a > 0 ? ',' : ''
+            return `\
+
+        declare function complement<${args}${argSeparator} Fn: (${args}) => boolean>(
+          f: Fn
+        ): Fn;`
+          }).join('\n')
+        }
+      #+END_SRC
+
+***** test
+
+      A simple test allows us to make a small sampling of permutations to debug.
+
+      #+BEGIN_SRC js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
+        <<ramda>>
+        <<complement-generator>>
+
+        console.log(complementGenerator(3))
+      #+END_SRC
+
+      #+RESULTS:
+      #+begin_example
+
+      declare function complement< Fn: () => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, Fn: (A) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, Fn: (A, B) => boolean>(
+        f: Fn
+      ): Fn;
+      #+end_example
+
+***** generate complement
+
+      Now we can put it all together. For now let's support up to 10 arg functions.
+
+      #+begin_src js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim :tangle ramda-complement.js
+        <<ramda>>
+        <<complement-generator>>
+
+        console.log('// The following code is generated from')
+        console.log('// https://github.com/LoganBarnett/typedef-gen due to Flow not being able to')
+        console.log('// preserve the input function\'s form as a return type.')
+        console.log('//')
+        console.log('// Begin generated complement declaration.')
+        console.log(complementGenerator(11))
+        console.log('// End generated complement declaration.')
+      #+end_src
+
+      #+RESULTS:
+      #+begin_example
+      // The following code is generated from
+      // https://github.com/LoganBarnett/typedef-gen due to Flow not being able to
+      // preserve the input function's form as a return type.
+      //
+      // Begin generated complement declaration.
+
+      declare function complement< Fn: () => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, Fn: (A) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, Fn: (A, B) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, C, Fn: (A, B, C) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, C, D, Fn: (A, B, C, D) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, C, D, E, Fn: (A, B, C, D, E) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, C, D, E, F, Fn: (A, B, C, D, E, F) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, C, D, E, F, G, Fn: (A, B, C, D, E, F, G) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, C, D, E, F, G, H, Fn: (A, B, C, D, E, F, G, H) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, C, D, E, F, G, H, I, Fn: (A, B, C, D, E, F, G, H, I) => boolean>(
+        f: Fn
+      ): Fn;
+
+      declare function complement<A, B, C, D, E, F, G, H, I, J, Fn: (A, B, C, D, E, F, G, H, I, J) => boolean>(
+        f: Fn
+      ): Fn;
+      // End generated complement declaration.
+      #+end_example
+
+*** flow-typed tests
+
+    =flow-typed= requires "unit tests" of the typings. These tests don't
+    actually need to run, but they do need to prove the declarations are
+    correct, and help capture intent from the typings.
+
+**** desired output
+     A test with up to an arity of two would look like this:
+
+     #+begin_example javascript
+
+     it('returns a function whose parameters match the input function (0)', () => {
+       const fn = complement(() => true)
+       // Extra arguments are discarded, so there is no negative case here.
+       fn()
+     })
+
+     it('returns a function whose parameters match the input function (1)', () => {
+       const fn = complement((a: number) => true)
+       fn(1)
+       // $ExpectError
+       fn('one')
+     })
+
+     it('returns a function whose parameters match the input function (2)', () => {
+       const fn = complement((a: number, b: string) => true)
+       fn(1, 'two')
+       // $ExpectError
+       fn('one', 2)
+     })
+
+     #+end_example
+
+**** declaring the complement argument
+
+     The complement argument has a form of =(a, b, ...) => bool=. With arbitrary
+     types, picking unique types for each argument can become laborious and
+     noisier than even generated code should be (assuming we have to grok it
+     later). One thing we can do is use string literals of the argument values
+     themselves. This means the function indeed uses strings, but also
+     specifically string values.
+
+     Our test form with two arguments would look like this:
+
+     #+begin_example javascript
+
+     it('returns a function whose parameters match the input function (2)', () => {
+       const fn = complement((a: 'a', b: 'b') => true)
+       fn('a', 'b')
+       // $ExpectError
+       fn('b', 'a')
+     })
+
+     #+end_example
+
+     We'll need to generate two parts - the function header and the call site.
+
+     #+name: complement-test-header
+     #+begin_src js :noweb yes :results none
+          <<complement-arg-name>>
+
+          function complementTestHeader(arity) {
+            return R.map(R.pipe(
+              argName,
+              R.toLower,
+              a => `${a}: '${a}',`,
+            ), R.range(0, arity)).join(' ')
+          }
+     #+end_src
+
+     A quick test:
+
+     #+begin_src js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
+       <<ramda>>
+       <<complement-test-header>>
+       console.log('three:')
+       console.log(complementTestHeader(3))
+       console.log('zero:')
+       console.log(complementTestHeader(0))
+     #+end_src
+
+     #+RESULTS:
+     : three:
+     : a: 'a', b: 'b', c: 'c',
+     : zero:
+     :
+
+     For the call site:
+
+     #+name: complement-test-call
+     #+begin_src js :noweb yes :results none
+          <<complement-arg-name>>
+
+          function complementTestCall(arity) {
+            return R.map(R.pipe(
+              argName,
+              R.toLower,
+              a => `'${a}',`,
+            ), R.range(0, arity)).join(' ')
+          }
+     #+end_src
+
+     A quick test:
+
+     #+begin_src js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
+       <<ramda>>
+       <<complement-test-call>>
+       console.log('three:')
+       console.log(complementTestCall(3))
+       console.log('zero:')
+       console.log(complementTestCall(0))
+     #+end_src
+
+     #+RESULTS:
+     : three:
+     : 'a', 'b', 'c',
+     : zero:
+     :
+
+**** generating permutations
+
+     #+name: complement-test-generator
+     #+begin_src js :noweb yes :results none
+       <<complement-arg-list>>
+       <<complement-test-header>>
+       <<complement-test-call>>
+
+       function complementTestGenerator(arity) {
+         return R.addIndex(R.map)((a, i) => {
+           const args = argListString(a)
+           return `\
+it('returns a function whose parameters match the input function (${i})', () => {
+  const fn = complement((${complementTestHeader(a)}) => true)
+  fn(${complementTestCall(a)})
+  ${a == 0
+  ? `\
+// Extra arguments are discarded, so there is no negative case here.`
+  : `// $ExpectError
+  fn(${R.map(R.toString, R.range(0, a)).join(', ')})`}
+})
+`
+
+         }, R.range(0, arity)).join('\n')
+       }
+     #+end_src
+
+     A quick test:
+
+     #+begin_src js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim
+       <<ramda>>
+       <<complement-test-generator>>
+
+       console.log(complementTestGenerator(2))
+     #+end_src
+
+     #+RESULTS:
+     #+begin_example
+     it('returns a function whose parameters match the input function (0)', () => {
+       const fn = complement(() => true)
+       fn()
+       // Extra arguments are discarded, so there is no negative case here.
+     })
+
+     it('returns a function whose parameters match the input function (1)', () => {
+       const fn = complement((a: 'a',) => true)
+       fn('a',)
+       // $ExpectError
+       fn(0)
+     })
+
+     #+end_example
+
+**** output
+     Let's support up to an arity of 10.
+     #+begin_src js :noweb yes :var dir=(file-name-directory buffer-file-name) :results output verbatim :tangle ramda-complement-tests.js
+       <<ramda>>
+       <<complement-test-generator>>
+
+       console.log('// The following code is generated from')
+       console.log('// https://github.com/LoganBarnett/typedef-gen due to Flow not being able to')
+       console.log('// preserve the input function\'s form as a return type.')
+       console.log('//')
+       console.log('// Begin generated complement test cases.')
+       console.log(complementTestGenerator(11))
+       console.log('// End generated complement test cases.')
+     #+end_src
+
+     #+RESULTS:
+     #+begin_example
+     // The following code is generated from
+     // https://github.com/LoganBarnett/typedef-gen due to Flow not being able to
+     // preserve the input function's form as a return type.
+     //
+     // Begin generated complement test cases.
+     it('returns a function whose parameters match the input function (0)', () => {
+       const fn = complement(() => true)
+       fn()
+       // Extra arguments are discarded, so there is no negative case here.
+     })
+
+     it('returns a function whose parameters match the input function (1)', () => {
+       const fn = complement((a: 'a',) => true)
+       fn('a',)
+       // $ExpectError
+       fn(0)
+     })
+
+     it('returns a function whose parameters match the input function (2)', () => {
+       const fn = complement((a: 'a', b: 'b',) => true)
+       fn('a', 'b',)
+       // $ExpectError
+       fn(0, 1)
+     })
+
+     it('returns a function whose parameters match the input function (3)', () => {
+       const fn = complement((a: 'a', b: 'b', c: 'c',) => true)
+       fn('a', 'b', 'c',)
+       // $ExpectError
+       fn(0, 1, 2)
+     })
+
+     it('returns a function whose parameters match the input function (4)', () => {
+       const fn = complement((a: 'a', b: 'b', c: 'c', d: 'd',) => true)
+       fn('a', 'b', 'c', 'd',)
+       // $ExpectError
+       fn(0, 1, 2, 3)
+     })
+
+     it('returns a function whose parameters match the input function (5)', () => {
+       const fn = complement((a: 'a', b: 'b', c: 'c', d: 'd', e: 'e',) => true)
+       fn('a', 'b', 'c', 'd', 'e',)
+       // $ExpectError
+       fn(0, 1, 2, 3, 4)
+     })
+
+     it('returns a function whose parameters match the input function (6)', () => {
+       const fn = complement((a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f',) => true)
+       fn('a', 'b', 'c', 'd', 'e', 'f',)
+       // $ExpectError
+       fn(0, 1, 2, 3, 4, 5)
+     })
+
+     it('returns a function whose parameters match the input function (7)', () => {
+       const fn = complement((a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f', g: 'g',) => true)
+       fn('a', 'b', 'c', 'd', 'e', 'f', 'g',)
+       // $ExpectError
+       fn(0, 1, 2, 3, 4, 5, 6)
+     })
+
+     it('returns a function whose parameters match the input function (8)', () => {
+       const fn = complement((a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f', g: 'g', h: 'h',) => true)
+       fn('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',)
+       // $ExpectError
+       fn(0, 1, 2, 3, 4, 5, 6, 7)
+     })
+
+     it('returns a function whose parameters match the input function (9)', () => {
+       const fn = complement((a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f', g: 'g', h: 'h', i: 'i',) => true)
+       fn('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',)
+       // $ExpectError
+       fn(0, 1, 2, 3, 4, 5, 6, 7, 8)
+     })
+
+     it('returns a function whose parameters match the input function (10)', () => {
+       const fn = complement((a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f', g: 'g', h: 'h', i: 'i', j: 'j',) => true)
+       fn('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',)
+       // $ExpectError
+       fn(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+     })
+
+     // End generated complement test cases.
+     #+end_example
+
+** partial                                                          :ARCHIVE:
+A simple function for =partial= might look like this:
 
 #+BEGIN_EXAMPLE javascript
 (<A, B, C, R>(...r: [A]) => ((...r: [B, C]) => R)) &
@@ -41,17 +505,6 @@ for a function to take no arguments.
 
 Each arity of a function requires N permutations, where N is the number of
 parameters of the function. 0 arg functions can be skipped.
-
-First off, let's use Ramda to fix Ramda. This is how you know this is a proper
-programming article.
-
-#+NAME: ramda
-#+BEGIN_SRC js :noweb yes :var dir=(file-name-directory buffer-file-name)
-const R = require(dir + 'node_modules/ramda')
-#+END_SRC
-
-#+RESULTS: ramda
-: undefined
 
 We need to use letters to express type names. Generally it's just a single
 capital letter, using =A= as the starting letter. =R= is reserved as a return
